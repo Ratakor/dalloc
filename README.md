@@ -1,0 +1,32 @@
+dalloc
+======
+A simple drop-in memory allocation debugging lib for C
+
+Usage
+-----
+dalloc.c and dalloc.h should be dropped into an existing project and
+compiled with the `-DDALLOC` flag to define the macro that enables dalloc.
+dalloc will replace free(), malloc(), calloc(), realloc(), reallocarray(),
+strdup(), and strndup() by a more secure version that will check for buffer
+overflow and memory leak. It will also output a recap at the end of the program.
+
+By defining `EXITSEGV` all exit() call will be replaced by a segfault which
+can be very useful to check where an overflow occur with a real debugger but
+will block dalloc() from being called at exit.
+
+Functions
+---------
+dfree(), dmalloc(), etc... should NEVER be used, use the classic functions and
+enable dalloc with `-DDALLOC` when debugging.
+
+strdup, strndup and reallocarray are not standard so you'll probably need to
+define `-D_DEFAULT_SOURCE` to use them outside of dalloc.
+
+#### dalloc_check_overflow(void)
+Output all memory overflow to stderr and return the sum of all overflow.
+
+#### dalloc_check_free(void)
+Output all allocation that were not freed to stderr.
+
+#### dalloc(void)
+Run both dalloc_check_free() and dalloc_check_overflow() when main ends.
