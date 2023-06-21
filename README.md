@@ -1,6 +1,6 @@
 dalloc
 ======
-A simple drop-in memory allocation debugging lib for C
+A simple, thread safe, drop-in memory allocation debugging lib for C
 
 Usage
 -----

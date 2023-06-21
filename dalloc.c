@@ -16,6 +16,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -27,7 +28,7 @@ void dalloc(void) __attribute__((destructor));
 #include "dalloc.h"
 
 #define MIN(X, Y)     ((X) < (Y) ? (X) : (Y))
-#define OVER_ALLOC    32
+#define OVER_ALLOC    64
 #define MAGIC_NUMBER  0x99
 #define EXIT_STATUS   9
 #define MAX_POINTERS  1024
@@ -44,18 +45,16 @@ struct Pointer {
 
 static int overflow(unsigned char *p, size_t siz);
 
-struct Pointer pointers[MAX_POINTERS];
+static pthread_mutex_t dalloc_mutex = PTHREAD_MUTEX_INITIALIZER;
+static struct Pointer pointers[MAX_POINTERS];
 static size_t npointers;
 
 static int
 overflow(unsigned char *p, size_t siz)
 {
-	size_t i;
+	size_t i = 0;
 
-	for (i = 0; i < OVER_ALLOC; i++) {
-		if (p[siz + i] != MAGIC_NUMBER)
-			break;
-	}
+	while (p[siz + i] == MAGIC_NUMBER && ++i < OVER_ALLOC);
 
 	return i < OVER_ALLOC;
 }
@@ -65,6 +64,7 @@ dalloc_check_overflow(void)
 {
 	size_t i, sum = 0;
 
+	pthread_mutex_lock(&dalloc_mutex);
 	for (i = 0; i < npointers; i++) {
 		if (!overflow(pointers[i].p, pointers[i].siz))
 			continue;
@@ -77,6 +77,8 @@ dalloc_check_overflow(void)
 		        pointers[i].p,
 		        pointers[i].siz);
 	}
+	pthread_mutex_unlock(&dalloc_mutex);
+
 	if (sum > 0)
 		fprintf(stderr, "Total overflow: %zu\n", sum);
 
@@ -88,16 +90,19 @@ dalloc_check_free(void)
 {
 	size_t i, sum = 0;
 
+	pthread_mutex_lock(&dalloc_mutex);
 	fprintf(stderr, "Memory allocated and not freed:");
 	for (i = 0; i < npointers; i++) {
 		sum += pointers[i].siz;
 		fprintf(stderr, "\n%s:%d: %zu bytes",
 		        pointers[i].file, pointers[i].line, pointers[i].siz);
 	}
+	pthread_mutex_unlock(&dalloc_mutex);
+
 	if (sum == 0)
 		fprintf(stderr, " 0 byte\n");
 	else
-		fprintf(stderr, "\nTotal: %zu bytes %zu pointers\n", sum, i);
+		fprintf(stderr, "\nTotal: %zu bytes, %zu pointers\n", sum, i);
 }
 
 void
@@ -111,16 +116,13 @@ dalloc(void)
 void
 dfree(void *p, char *file, int line)
 {
-	size_t i, j, k;
+	size_t i = 0, j;
 
 	if (p == NULL)
 		return;
 
-	for (i = 0; i < npointers; i++) {
-		if (p == pointers[i].p)
-			break;
-	}
-
+	pthread_mutex_lock(&dalloc_mutex);
+	while (p != pointers[i].p && ++i < npointers);
 	if (i == npointers) {
 		fprintf(stderr,
 		        "%s:%d: dalloc: Try to free a non allocated pointer\n",
@@ -137,15 +139,16 @@ dfree(void *p, char *file, int line)
 	}
 
 	/* TODO: ugly */
-	for (j = i + 1; j < npointers; j++) {
-		pointers[j - 1].p = pointers[j].p;
-		pointers[j - 1].siz = pointers[j].siz;
-		for (k = 0; k < PATH_MAX && pointers[j].file[k] != '\0'; k++)
-			pointers[j - 1].file[k] = pointers[j].file[k];
-		pointers[j - 1].file[k] = '\0';
-		pointers[j - 1].line = pointers[j].line;
+	for (i++; i < npointers; i++) {
+		pointers[i - 1].p = pointers[i].p;
+		pointers[i - 1].siz = pointers[i].siz;
+		for (j = 0; j < PATH_MAX && pointers[i].file[j] != '\0'; j++)
+			pointers[i - 1].file[j] = pointers[i].file[j];
+		pointers[i - 1].file[j] = '\0';
+		pointers[i - 1].line = pointers[i].line;
 	}
 	npointers--;
+	pthread_mutex_unlock(&dalloc_mutex);
 	free(p);
 }
 
@@ -174,6 +177,7 @@ dmalloc(size_t siz, char *file, int line)
 	}
 
 	memset((unsigned char *)p + siz, MAGIC_NUMBER, OVER_ALLOC);
+	pthread_mutex_lock(&dalloc_mutex);
 	pointers[npointers].p = p;
 	pointers[npointers].siz = siz;
 	for (i = 0; i < PATH_MAX - 1 && file[i] != '\0'; i++)
@@ -181,6 +185,7 @@ dmalloc(size_t siz, char *file, int line)
 	pointers[npointers].file[i] = '\0';
 	pointers[npointers].line = line;
 	npointers++;
+	pthread_mutex_unlock(&dalloc_mutex);
 
 	return p;
 }
@@ -209,23 +214,23 @@ drealloc(void *p, size_t siz, char *file, int line)
 {
 
 	void *np;
-	size_t i;
+	size_t i = 0, osiz;
 
 	if (p == NULL)
 		return dmalloc(siz, file, line);
 
-	for (i = 0; i < npointers; i++) {
-		if (p == pointers[i].p)
-			break;
-	}
+	pthread_mutex_lock(&dalloc_mutex);
+	while (p != pointers[i].p && ++i < npointers);
 	if (i == npointers) {
 		fprintf(stderr, "%s:%d: dalloc: realloc: Unknown pointer %p\n",
 		        file, line, p);
 		exit(EXIT_STATUS);
 	}
+	osiz = pointers[i].siz;
+	pthread_mutex_unlock(&dalloc_mutex);
 
 	np = dmalloc(siz, file, line);
-	memcpy(np, p, MIN(pointers[i].siz, siz));
+	memcpy(np, p, MIN(osiz, siz));
 	dfree(p, file, line);
 
 	return np;

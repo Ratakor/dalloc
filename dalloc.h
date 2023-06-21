@@ -11,6 +11,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
 #ifdef DALLOC
 #define free(p)                 (dfree(p, __FILE__, __LINE__))
 #define malloc(siz)             (dmalloc(siz, __FILE__, __LINE__))
@@ -38,4 +42,8 @@ char *dstrdup(const char *s, char *file, int line);
 char *dstrndup(const char *s, size_t n, char *file, int line);
 void exitsegv(int dummy);
 
-#endif /* DEBUGMEM_H */
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
+
+#endif /* DALLOC_H */
