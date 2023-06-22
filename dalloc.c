@@ -21,11 +21,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifdef DALLOC
+#ifndef DALLOC
+#define NO_DALLOC     "dalloc: Define `DALLOC` to enable dalloc"
+#else
 void dalloc_check_all(void) __attribute__((destructor));
 #undef DALLOC
-#else
-#define NO_DALLOC     "dalloc: Define `DALLOC` to enable dalloc"
 #endif /* DALLOC */
 #include "dalloc.h"
 
@@ -72,22 +72,22 @@ dalloc_check_overflow(void)
 #endif /* NO_DALLOC */
 
 	pthread_mutex_lock(&dalloc_mutex);
+	fprintf(stderr, "Memory overflow:");
 	for (i = 0; i < npointers; i++) {
 		if (!overflow(pointers[i].p, pointers[i].siz))
 			continue;
 
 		sum++;
-		fprintf(stderr,
-		        "%s:%d: dalloc: Memory overflow on %p size: %zu\n",
-		        pointers[i].file,
-		        pointers[i].line,
-		        pointers[i].p,
-		        pointers[i].siz);
+		fprintf(stderr, "\n%s:%d: %p, total: %zu bytes",
+		        pointers[i].file, pointers[i].line,
+		        pointers[i].p, pointers[i].siz);
 	}
 	pthread_mutex_unlock(&dalloc_mutex);
 
-	if (sum > 0)
-		fprintf(stderr, "Total overflow: %zu\n", sum);
+	if (sum == 0)
+		fprintf(stderr, " 0 overflow :)\n");
+	else
+		fprintf(stderr, "\nTotal overflow: %zu\n", sum);
 
 	return sum;
 }
@@ -106,13 +106,14 @@ dalloc_check_free(void)
 	fprintf(stderr, "Memory allocated and not freed:");
 	for (i = 0; i < npointers; i++) {
 		sum += pointers[i].siz;
-		fprintf(stderr, "\n%s:%d: %zu bytes",
-		        pointers[i].file, pointers[i].line, pointers[i].siz);
+		fprintf(stderr, "\n%s:%d: %p, %zu bytes",
+		        pointers[i].file, pointers[i].line,
+		        pointers[i].p, pointers[i].siz);
 	}
 	pthread_mutex_unlock(&dalloc_mutex);
 
 	if (sum == 0)
-		fprintf(stderr, " 0 byte\n");
+		fprintf(stderr, " 0 byte :)\n");
 	else
 		fprintf(stderr, "\nTotal: %zu bytes, %zu pointers\n", sum, i);
 }
@@ -147,21 +148,20 @@ dfree(void *p, char *file, int line)
 	pthread_mutex_lock(&dalloc_mutex);
 	while (p != pointers[i].p && ++i < npointers);
 	if (i == npointers) {
-		fprintf(stderr,
-		        "%s:%d: dalloc: Try to free a non allocated pointer\n",
-		        file, line);
+		fprintf(stderr, "%s:%d: dalloc: Double free\n", file, line);
+		pthread_mutex_unlock(&dalloc_mutex);
 		exit(EXIT_STATUS);
 	}
 
 	if (overflow(pointers[i].p, pointers[i].siz)) {
-		fprintf(stderr,
-		        "%s:%d: dalloc: Memory overflow on %p size: %zu\n",
+		fprintf(stderr, "%s:%d: dalloc:"
+		        "Memory overflow on %p, total: %zu bytes\n",
 		        pointers[i].file, pointers[i].line,
 		        pointers[i].p, pointers[i].siz);
+		pthread_mutex_unlock(&dalloc_mutex);
 		exit(EXIT_STATUS);
 	}
 
-	/* TODO: ugly */
 	for (i++; i < npointers; i++) {
 		pointers[i - 1].p = pointers[i].p;
 		pointers[i - 1].siz = pointers[i].siz;
@@ -194,8 +194,8 @@ dmalloc(size_t siz, char *file, int line)
 		p = malloc(siz + OVER_ALLOC);
 
 	if (p == NULL) {
-		fprintf(stderr, "%s:%d: dalloc: %s\nsize: %zu\n",
-		        file, line, strerror(errno), siz);
+		fprintf(stderr, "%s:%d: dalloc: %s\n",
+		        file, line, strerror(errno));
 		exit(EXIT_STATUS);
 	}
 
@@ -221,7 +221,6 @@ dcalloc(size_t nmemb, size_t siz, char *file, int line)
 	if (siz != 0 && nmemb > -1 / siz) {
 		fprintf(stderr, "%s:%d: dalloc: calloc: %s\n",
 		        file, line, strerror(ENOMEM));
-		fprintf(stderr, "nmemb: %zu size: %zu\n", nmemb, siz);
 		exit(EXIT_STATUS);
 	}
 
@@ -247,6 +246,7 @@ drealloc(void *p, size_t siz, char *file, int line)
 	if (i == npointers) {
 		fprintf(stderr, "%s:%d: dalloc: realloc: Unknown pointer %p\n",
 		        file, line, p);
+		pthread_mutex_unlock(&dalloc_mutex);
 		exit(EXIT_STATUS);
 	}
 	osiz = pointers[i].siz;
@@ -265,7 +265,6 @@ dreallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
 	if (siz != 0 && nmemb > -1 / siz) {
 		fprintf(stderr, "%s:%d: dalloc: reallocarray: %s\n",
 		        file, line, strerror(ENOMEM));
-		fprintf(stderr, "nmemb: %zu size: %zu\n", nmemb, siz);
 		exit(EXIT_STATUS);
 	}
 

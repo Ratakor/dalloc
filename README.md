@@ -32,4 +32,4 @@ Run both dalloc_check_free() and dalloc_check_overflow() on program exit.
 
 #### dalloc_sighandler(int sig)
 Output signal meaning and exit. To be used with signal() from signal.h.
-e.g. `signal(SIG, dalloc_sighandler);` Doesn't work well with SIGSEGV.
+e.g.: `signal(SIG, dalloc_sighandler);`
