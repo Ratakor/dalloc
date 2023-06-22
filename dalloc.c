@@ -22,8 +22,10 @@
 #include <string.h>
 
 #ifdef DALLOC
-void dalloc(void) __attribute__((destructor));
+void dalloc_check_all(void) __attribute__((destructor));
 #undef DALLOC
+#else
+#define NO_DALLOC     "dalloc: Define `DALLOC` to enable dalloc"
 #endif /* DALLOC */
 #include "dalloc.h"
 
@@ -64,6 +66,11 @@ dalloc_check_overflow(void)
 {
 	size_t i, sum = 0;
 
+#ifdef NO_DALLOC
+	fprintf(stderr, "%s\n", NO_DALLOC);
+	return 0;
+#endif /* NO_DALLOC */
+
 	pthread_mutex_lock(&dalloc_mutex);
 	for (i = 0; i < npointers; i++) {
 		if (!overflow(pointers[i].p, pointers[i].siz))
@@ -90,6 +97,11 @@ dalloc_check_free(void)
 {
 	size_t i, sum = 0;
 
+#ifdef NO_DALLOC
+	fprintf(stderr, "%s\n", NO_DALLOC);
+	return;
+#endif /* NO_DALLOC */
+
 	pthread_mutex_lock(&dalloc_mutex);
 	fprintf(stderr, "Memory allocated and not freed:");
 	for (i = 0; i < npointers; i++) {
@@ -106,11 +118,22 @@ dalloc_check_free(void)
 }
 
 void
-dalloc(void)
+dalloc_check_all(void)
 {
-	fprintf(stderr, "dalloc recap:\n");
+#ifdef NO_DALLOC
+	fprintf(stderr, "%s\n", NO_DALLOC);
+	return;
+#endif /* NO_DALLOC */
+
 	dalloc_check_overflow();
 	dalloc_check_free();
+}
+
+void
+dalloc_sighandler(int sig)
+{
+	fprintf(stderr, "dalloc: %s\n", strsignal(sig));
+	exit(EXIT_STATUS);
 }
 
 void
@@ -282,5 +305,7 @@ void
 exitsegv(int dummy)
 {
 	int *x = NULL;
+
+	dalloc_check_all();
 	*x = dummy;
 }

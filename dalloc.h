@@ -31,7 +31,8 @@ extern "C" {
 
 size_t dalloc_check_overflow(void);
 void dalloc_check_free(void);
-void dalloc(void);
+void dalloc_check_all(void);
+void dalloc_sighandler(int sig);
 
 void dfree(void *p, char *file, int line);
 void *dmalloc(size_t siz, char *file, int line);

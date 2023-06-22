@@ -10,9 +10,8 @@ dalloc will replace free(), malloc(), calloc(), realloc(), reallocarray(),
 strdup(), and strndup() by a more secure version that will check for buffer
 overflow and memory leak. It will also output a recap at the end of the program.
 
-By defining `EXITSEGV` all exit() call will be replaced by a segfault which
-can be very useful to check where an overflow occur with a real debugger but
-will block dalloc() from being called at exit.
+By defining `EXITSEGV` all exit() call will be replaced by a segmentation fault
+which can be very useful to check where an overflow occur with a real debugger.
 
 Functions
 ---------
@@ -28,5 +27,9 @@ Output all memory overflow to stderr and return the sum of all overflow.
 #### dalloc_check_free(void)
 Output all allocation that were not freed to stderr.
 
-#### dalloc(void)
-Run both dalloc_check_free() and dalloc_check_overflow() when main ends.
+#### dalloc_check_all(void)
+Run both dalloc_check_free() and dalloc_check_overflow() on program exit.
+
+#### dalloc_sighandler(int sig)
+Output signal meaning and exit. To be used with signal() from signal.h.
+e.g. `signal(SIG, dalloc_sighandler);` Doesn't work well with SIGSEGV.
