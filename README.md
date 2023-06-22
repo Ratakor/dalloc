@@ -18,8 +18,8 @@ Functions
 dfree(), dmalloc(), etc... should NEVER be used, use the classic functions and
 enable dalloc with `-DDALLOC` when debugging.
 
-strdup, strndup and reallocarray are not standard so you'll probably need to
-define `-D_DEFAULT_SOURCE` to use them outside of dalloc.
+strdup, strndup and reallocarray are not standard so you'll need to define
+`_DEFAULT_SOURCE` or equivalent to use them.
 
 #### dalloc_check_overflow(void)
 Output all memory overflow to stderr and return the sum of all overflow.
@@ -32,4 +32,4 @@ Run both dalloc_check_free() and dalloc_check_overflow() on program exit.
 
 #### dalloc_sighandler(int sig)
 Output signal meaning and exit. To be used with signal() from signal.h.
-e.g.: `signal(SIG, dalloc_sighandler);`
+e.g.: `signal(SIG, dalloc_sighandler);` Require `_DEFAULT_SOURCE` or equivalent.
