@@ -18,8 +18,8 @@ Functions
 dfree(), dmalloc(), etc... should NEVER be used, use the classic functions and
 enable dalloc with `-DDALLOC` when debugging.
 
-strdup, strndup and reallocarray are not standard so you'll need to define
-`_DEFAULT_SOURCE` or equivalent to use them.
+strdup, strndup and reallocarray are not standard so you'll probably need to
+define `_DEFAULT_SOURCE` or equivalent to use them outside of dalloc.
 
 #### dalloc_check_overflow(void)
 Output all memory overflow to stderr and return the sum of all overflow.

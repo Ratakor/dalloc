@@ -154,10 +154,12 @@ dfree(void *p, char *file, int line)
 	}
 
 	if (overflow(pointers[i].p, pointers[i].siz)) {
-		fprintf(stderr, "%s:%d: dalloc:"
+		fprintf(stderr, "%s:%d: dalloc: "
 		        "Memory overflow on %p, total: %zu bytes\n",
-		        pointers[i].file, pointers[i].line,
-		        pointers[i].p, pointers[i].siz);
+		        file, line, pointers[i].p, pointers[i].siz);
+		fprintf(stderr,
+		        "The pointer was allocated in '%s' on line %d\n",
+		        pointers[i].file, pointers[i].line);
 		pthread_mutex_unlock(&dalloc_mutex);
 		exit(EXIT_STATUS);
 	}
@@ -171,8 +173,8 @@ dfree(void *p, char *file, int line)
 		pointers[i - 1].line = pointers[i].line;
 	}
 	npointers--;
-	pthread_mutex_unlock(&dalloc_mutex);
 	free(p);
+	pthread_mutex_unlock(&dalloc_mutex);
 }
 
 
@@ -240,6 +242,11 @@ drealloc(void *p, size_t siz, char *file, int line)
 
 	if (p == NULL)
 		return dmalloc(siz, file, line);
+
+	if (siz == 0) {
+		dfree(p, file, line);
+		return NULL;
+	}
 
 	pthread_mutex_lock(&dalloc_mutex);
 	while (p != pointers[i].p && ++i < npointers);

@@ -20,15 +20,9 @@ extern "C" {
 #define malloc(siz)             (dmalloc(siz, __FILE__, __LINE__))
 #define calloc(nmemb, siz)      (dcalloc(nmemb, siz, __FILE__, __LINE__))
 #define realloc(p, siz)         (drealloc(p, siz, __FILE__, __LINE__))
-#if defined(_GNU_SOURCE) || defined(_BSD_SOURCE)
 #define reallocarray(p, n, siz) (dreallocarray(p, n, siz, __FILE__, __LINE__))
-#endif /* reallocarray macro requirement */
-#if defined(_XOPEN_SOURCE) || defined(_BSD_SOURCE) ||\
-    defined(_POSIX_SOURCE) || defined(_GNU_SOURCE) ||\
-    defined(_POSIX_C_SOURCE)
 #define strdup(s)               (dstrdup(s, __FILE__, __LINE__))
 #define strndup(s, n)           (dstrndup(s, n, __FILE__, __LINE__))
-#endif /* strdup/strndup macro requirement */
 #endif /* DALLOC */
 
 #ifdef EXITSEGV
