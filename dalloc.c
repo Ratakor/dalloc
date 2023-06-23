@@ -36,7 +36,7 @@ void dalloc_check_all(void) __attribute__((destructor));
 #define MAX_POINTERS  1024
 #ifndef PATH_MAX
 #define PATH_MAX      256
-#endif
+#endif /* PATH_MAX */
 
 struct Pointer {
 	void *p;
@@ -183,6 +183,9 @@ dmalloc(size_t siz, char *file, int line)
 {
 	void *p = NULL;
 	size_t i;
+
+	if (siz == 0)
+		return NULL;
 
 	if (npointers == MAX_POINTERS) {
 		fprintf(stderr, "dalloc: Too much pointers (max:%d)\n",
