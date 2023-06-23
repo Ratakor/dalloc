@@ -223,7 +223,10 @@ dcalloc(size_t nmemb, size_t siz, char *file, int line)
 {
 	void *p;
 
-	if (siz != 0 && nmemb > -1 / siz) {
+	if (nmemb == 0 || siz == 0)
+		return NULL;
+
+	if (nmemb > -1 / siz) {
 		fprintf(stderr, "%s:%d: dalloc: calloc: %s\n",
 		        file, line, strerror(ENOMEM));
 		exit(EXIT_STATUS);
