@@ -138,9 +138,9 @@ dalloc_sighandler(int sig)
 }
 
 void
-dfree(void *p, char *file, int line)
+__free(void *p, char *file, int line)
 {
-	size_t i = 0, j;
+	size_t i = 0;
 
 	if (p == NULL)
 		return;
@@ -164,14 +164,8 @@ dfree(void *p, char *file, int line)
 		exit(EXIT_STATUS);
 	}
 
-	for (i++; i < npointers; i++) {
-		pointers[i - 1].p = pointers[i].p;
-		pointers[i - 1].siz = pointers[i].siz;
-		for (j = 0; j < PATH_MAX && pointers[i].file[j] != '\0'; j++)
-			pointers[i - 1].file[j] = pointers[i].file[j];
-		pointers[i - 1].file[j] = '\0';
-		pointers[i - 1].line = pointers[i].line;
-	}
+	for (i++; i < npointers; i++)
+		pointers[i - 1] = pointers[i];
 	npointers--;
 	free(p);
 	pthread_mutex_unlock(&dalloc_mutex);
@@ -179,7 +173,7 @@ dfree(void *p, char *file, int line)
 
 
 void *
-dmalloc(size_t siz, char *file, int line)
+__malloc(size_t siz, char *file, int line)
 {
 	void *p = NULL;
 	size_t i;
@@ -219,7 +213,7 @@ dmalloc(size_t siz, char *file, int line)
 }
 
 void *
-dcalloc(size_t nmemb, size_t siz, char *file, int line)
+__calloc(size_t nmemb, size_t siz, char *file, int line)
 {
 	void *p;
 
@@ -233,24 +227,24 @@ dcalloc(size_t nmemb, size_t siz, char *file, int line)
 	}
 
 	siz *= nmemb;
-	p = dmalloc(siz, file, line);
+	p = __malloc(siz, file, line);
 	memset(p, 0, siz);
 
 	return p;
 }
 
 void *
-drealloc(void *p, size_t siz, char *file, int line)
+__realloc(void *p, size_t siz, char *file, int line)
 {
 
 	void *np;
 	size_t i = 0, osiz;
 
 	if (p == NULL)
-		return dmalloc(siz, file, line);
+		return __malloc(siz, file, line);
 
 	if (siz == 0) {
-		dfree(p, file, line);
+		__free(p, file, line);
 		return NULL;
 	}
 
@@ -265,15 +259,15 @@ drealloc(void *p, size_t siz, char *file, int line)
 	osiz = pointers[i].siz;
 	pthread_mutex_unlock(&dalloc_mutex);
 
-	np = dmalloc(siz, file, line);
+	np = __malloc(siz, file, line);
 	memcpy(np, p, MIN(osiz, siz));
-	dfree(p, file, line);
+	__free(p, file, line);
 
 	return np;
 }
 
 void *
-dreallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
+__reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
 {
 	if (siz != 0 && nmemb > -1 / siz) {
 		fprintf(stderr, "%s:%d: dalloc: reallocarray: %s\n",
@@ -281,24 +275,24 @@ dreallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
 		exit(EXIT_STATUS);
 	}
 
-	return drealloc(p, nmemb * siz, file, line);
+	return __realloc(p, nmemb * siz, file, line);
 }
 
 char *
-dstrdup(const char *s, char *file, int line)
+__strdup(const char *s, char *file, int line)
 {
 	char *p;
 	size_t siz;
 
 	siz = strlen(s) + 1;
-	p = dmalloc(siz, file, line);
+	p = __malloc(siz, file, line);
 	memcpy(p, s, siz);
 
 	return p;
 }
 
 char *
-dstrndup(const char *s, size_t n, char *file, int line)
+__strndup(const char *s, size_t n, char *file, int line)
 {
 	const char *end;
 	char *p;
@@ -306,7 +300,7 @@ dstrndup(const char *s, size_t n, char *file, int line)
 
 	end = memchr(s, '\0', n);
 	siz = (end ? (size_t)(end - s) : n) + 1;
-	p = dmalloc(siz, file, line);
+	p = __malloc(siz, file, line);
 	memcpy(p, s, siz - 1);
 	p[siz - 1] = '\0';
 

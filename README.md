@@ -13,14 +13,11 @@ overflow and memory leak. It will also output a recap at the end of the program.
 By defining `EXITSEGV` all exit() call will be replaced by a segmentation fault
 which can be very useful to check where an overflow occur with a real debugger.
 
-Functions
----------
-dfree(), dmalloc(), etc... should NEVER be used, use the classic functions and
-enable dalloc with `-DDALLOC` when debugging.
-
 strdup, strndup and reallocarray are not standard so you'll probably need to
 define `_DEFAULT_SOURCE` or equivalent to use them outside of dalloc.
 
+Functions
+---------
 #### dalloc_check_overflow(void)
 Output all memory overflow to stderr and return the sum of all overflow.
 
