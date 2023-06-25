@@ -29,24 +29,23 @@ extern "C" {
 #define exit(dummy)             (exitsegv(dummy))
 #endif /* EXITSEGV */
 
+#define dalloc_ignore(p)        (__dalloc_ignore(p, __FILE__, __LINE__))
+#define dalloc_comment(p, com)  (__dalloc_comment(p, com, __FILE__, __LINE__))
+
 size_t dalloc_check_overflow(void);
 void dalloc_check_free(void);
 void dalloc_check_all(void);
 void dalloc_sighandler(int sig);
 
+void __dalloc_ignore(void *p, char *file, int line);
+void __dalloc_comment(void *p, char *comment, char *file, int line);
 void __free(void *p, char *file, int line);
-void *__malloc(size_t siz, char *file, int line)
-	__attribute_warn_unused_result__;
-void *__calloc(size_t nmemb, size_t siz, char *file, int line)
-	__attribute_warn_unused_result__;
-void *__realloc(void *p, size_t siz, char *file, int line)
-	__attribute_warn_unused_result__;
-void *__reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
-	__attribute_warn_unused_result__;
-char *__strdup(const char *s, char *file, int line)
-	__attribute_warn_unused_result__ __nonnull ((1));
-char *__strndup(const char *s, size_t n, char *file, int line)
-	__attribute_warn_unused_result__ __nonnull ((1));
+void *__malloc(size_t siz, char *file, int line);
+void *__calloc(size_t nmemb, size_t siz, char *file, int line);
+void *__realloc(void *p, size_t siz, char *file, int line);
+void *__reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line);
+char *__strdup(const char *s, char *file, int line);
+char *__strndup(const char *s, size_t n, char *file, int line);
 
 void exitsegv(int dummy);
 

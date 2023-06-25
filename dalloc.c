@@ -29,11 +29,11 @@ void dalloc_check_all(void) __attribute__((destructor));
 #endif /* DALLOC */
 #include "dalloc.h"
 
-#define MIN(X, Y)     ((X) < (Y) ? (X) : (Y))
 #define OVER_ALLOC    64
 #define MAGIC_NUMBER  0x99
 #define EXIT_STATUS   9
 #define MAX_POINTERS  1024
+#define COMMENT_MAX   128
 #ifndef PATH_MAX
 #define PATH_MAX      256
 #endif /* PATH_MAX */
@@ -41,11 +41,14 @@ void dalloc_check_all(void) __attribute__((destructor));
 struct Pointer {
 	void *p;
 	size_t siz;
+	char comment[COMMENT_MAX];
+	int ignored;
 	char file[PATH_MAX];
 	int line;
 };
 
 static int overflow(unsigned char *p, size_t siz);
+static size_t find_pointer_index(void *p, char *file, int line);
 
 static pthread_mutex_t dalloc_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct Pointer pointers[MAX_POINTERS];
@@ -59,6 +62,23 @@ overflow(unsigned char *p, size_t siz)
 	while (p[siz + i] == MAGIC_NUMBER && ++i < OVER_ALLOC);
 
 	return i < OVER_ALLOC;
+}
+
+static size_t
+find_pointer_index(void *p, char *file, int line)
+{
+	ssize_t i = npointers;
+
+	while (i-- > 0 && p != pointers[i].p);
+
+	if (i == -1) {
+		fprintf(stderr, "%s:%d: dalloc: Unknown pointer %p\n",
+		        file, line, p);
+		pthread_mutex_unlock(&dalloc_mutex);
+		exit(EXIT_STATUS);
+	}
+
+	return i;
 }
 
 size_t
@@ -81,6 +101,8 @@ dalloc_check_overflow(void)
 		fprintf(stderr, "\n%s:%d: %p, total: %zu bytes",
 		        pointers[i].file, pointers[i].line,
 		        pointers[i].p, pointers[i].siz);
+		if (pointers[i].comment[0] != 0)
+			fprintf(stderr, " /* %s */", pointers[i].comment);
 	}
 	pthread_mutex_unlock(&dalloc_mutex);
 
@@ -105,10 +127,15 @@ dalloc_check_free(void)
 	pthread_mutex_lock(&dalloc_mutex);
 	fprintf(stderr, "Memory allocated and not freed:");
 	for (i = 0; i < npointers; i++) {
+		if (pointers[i].ignored)
+			continue;
+
 		sum += pointers[i].siz;
 		fprintf(stderr, "\n%s:%d: %p, %zu bytes",
 		        pointers[i].file, pointers[i].line,
 		        pointers[i].p, pointers[i].siz);
+		if (pointers[i].comment[0] != 0)
+			fprintf(stderr, " /* %s */", pointers[i].comment);
 	}
 	pthread_mutex_unlock(&dalloc_mutex);
 
@@ -138,27 +165,55 @@ dalloc_sighandler(int sig)
 }
 
 void
+__dalloc_ignore(void *p, char *file, int line)
+{
+	size_t i;
+
+#ifdef NO_DALLOC
+	return;
+#endif /* NO_DALLOC */
+
+	pthread_mutex_lock(&dalloc_mutex);
+	i = find_pointer_index(p, file, line);
+	pointers[i].ignored = 1;
+	pthread_mutex_unlock(&dalloc_mutex);
+}
+
+void
+__dalloc_comment(void *p, char *comment, char *file, int line)
+{
+	size_t i, j;
+
+#ifdef NO_DALLOC
+	return;
+#endif /* NO_DALLOC */
+
+	pthread_mutex_lock(&dalloc_mutex);
+	i = find_pointer_index(p, file, line);
+	for (j = 0; j < COMMENT_MAX && comment[j] != '\0'; j++)
+		pointers[i].comment[j] = comment[j];
+	pointers[i].comment[j] = '\0';
+	pthread_mutex_unlock(&dalloc_mutex);
+}
+
+void
 __free(void *p, char *file, int line)
 {
-	size_t i = 0;
+	size_t i;
 
 	if (p == NULL)
 		return;
 
 	pthread_mutex_lock(&dalloc_mutex);
-	while (p != pointers[i].p && ++i < npointers);
-	if (i == npointers) {
-		fprintf(stderr, "%s:%d: dalloc: Double free\n", file, line);
-		pthread_mutex_unlock(&dalloc_mutex);
-		exit(EXIT_STATUS);
-	}
-
+	i = find_pointer_index(p, file, line);
 	if (overflow(pointers[i].p, pointers[i].siz)) {
 		fprintf(stderr, "%s:%d: dalloc: "
 		        "Memory overflow on %p, total: %zu bytes\n",
 		        file, line, pointers[i].p, pointers[i].siz);
-		fprintf(stderr,
-		        "The pointer was allocated in '%s' on line %d\n",
+		fprintf(stderr, "The pointer ");
+		if (pointers[i].comment[0] != 0)
+			fprintf(stderr, "'%s' ", pointers[i].comment);
+		fprintf(stderr, "was allocated in '%s' on line %d.\n",
 		        pointers[i].file, pointers[i].line);
 		pthread_mutex_unlock(&dalloc_mutex);
 		exit(EXIT_STATUS);
@@ -236,9 +291,7 @@ __calloc(size_t nmemb, size_t siz, char *file, int line)
 void *
 __realloc(void *p, size_t siz, char *file, int line)
 {
-
-	void *np;
-	size_t i = 0, osiz;
+	size_t i, j;
 
 	if (p == NULL)
 		return __malloc(siz, file, line);
@@ -249,21 +302,45 @@ __realloc(void *p, size_t siz, char *file, int line)
 	}
 
 	pthread_mutex_lock(&dalloc_mutex);
-	while (p != pointers[i].p && ++i < npointers);
-	if (i == npointers) {
-		fprintf(stderr, "%s:%d: dalloc: realloc: Unknown pointer %p\n",
-		        file, line, p);
+	i = find_pointer_index(p, file, line);
+
+	if (overflow(pointers[i].p, pointers[i].siz)) {
+		fprintf(stderr, "%s:%d: dalloc: "
+		        "Memory overflow on %p, total: %zu bytes\n",
+		        file, line, pointers[i].p, pointers[i].siz);
+		fprintf(stderr, "The pointer ");
+		if (pointers[i].comment[0] != 0)
+			fprintf(stderr, "'%s' ", pointers[i].comment);
+		fprintf(stderr, "was allocated in '%s' on line %d.\n",
+		        pointers[i].file, pointers[i].line);
 		pthread_mutex_unlock(&dalloc_mutex);
 		exit(EXIT_STATUS);
 	}
-	osiz = pointers[i].siz;
+
+	if (siz + OVER_ALLOC < OVER_ALLOC) {
+		p = NULL;
+		errno = ENOMEM;
+	} else {
+		p = realloc(p, siz + OVER_ALLOC);
+	}
+
+	if (p == NULL) {
+		fprintf(stderr, "%s:%d: dalloc: %s\n",
+		        file, line, strerror(errno));
+		pthread_mutex_unlock(&dalloc_mutex);
+		exit(EXIT_STATUS);
+	}
+
+	memset((unsigned char *)p + siz, MAGIC_NUMBER, OVER_ALLOC);
+	pointers[i].p = p;
+	pointers[i].siz = siz;
+	for (j = 0; j < PATH_MAX - 1 && file[j] != '\0'; j++)
+		pointers[i].file[j] = file[j];
+	pointers[i].file[j] = '\0';
+	pointers[i].line = line;
 	pthread_mutex_unlock(&dalloc_mutex);
 
-	np = __malloc(siz, file, line);
-	memcpy(np, p, MIN(osiz, siz));
-	__free(p, file, line);
-
-	return np;
+	return p;
 }
 
 void *

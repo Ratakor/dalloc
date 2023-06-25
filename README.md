@@ -30,3 +30,18 @@ Run both dalloc_check_free() and dalloc_check_overflow() on program exit.
 #### dalloc_sighandler(int sig)
 Output signal meaning and exit. To be used with signal() from signal.h.
 e.g.: `signal(SIG, dalloc_sighandler);` Require `_DEFAULT_SOURCE` or equivalent.
+
+#### dalloc_ignore(void *p)
+Ignore the pointer in argument for memory leak check. This can be useful when
+developing an application that never stop.
+When `DALLOC` is not defined this function does nothing.
+
+#### dalloc_comment(void *p, char *comment)
+Add a comment to a pointer so it is more easy to know what the pointer stands
+for just by looking at the error message from dalloc.
+When `DALLOC` is not defined this function does nothing.
+
+Notes
+-----
+An error with "Unknown pointer" is either caused by a double free or when
+freeing a pointer allocated with a function not supported by dalloc.
