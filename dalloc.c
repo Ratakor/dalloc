@@ -67,11 +67,11 @@ overflow(unsigned char *p, size_t siz)
 static size_t
 find_pointer_index(void *p, char *file, int line)
 {
-	ssize_t i = npointers;
+	size_t i = npointers;
 
 	while (i-- > 0 && p != pointers[i].p);
 
-	if (i == -1) {
+	if (i == (size_t) -1) {
 		fprintf(stderr, "%s:%d: dalloc: Unknown pointer %p\n",
 		        file, line, p);
 		pthread_mutex_unlock(&dalloc_mutex);
@@ -101,7 +101,7 @@ dalloc_check_overflow(void)
 		fprintf(stderr, "\n%s:%d: %p, total: %zu bytes",
 		        pointers[i].file, pointers[i].line,
 		        pointers[i].p, pointers[i].siz);
-		if (pointers[i].comment[0] != 0)
+		if (pointers[i].comment[0])
 			fprintf(stderr, " /* %s */", pointers[i].comment);
 	}
 	pthread_mutex_unlock(&dalloc_mutex);
@@ -134,7 +134,7 @@ dalloc_check_free(void)
 		fprintf(stderr, "\n%s:%d: %p, %zu bytes",
 		        pointers[i].file, pointers[i].line,
 		        pointers[i].p, pointers[i].siz);
-		if (pointers[i].comment[0] != 0)
+		if (pointers[i].comment[0])
 			fprintf(stderr, " /* %s */", pointers[i].comment);
 	}
 	pthread_mutex_unlock(&dalloc_mutex);
@@ -165,7 +165,7 @@ dalloc_sighandler(int sig)
 }
 
 void
-__dalloc_ignore(void *p, char *file, int line)
+_dalloc_ignore(void *p, char *file, int line)
 {
 	size_t i;
 
@@ -180,7 +180,7 @@ __dalloc_ignore(void *p, char *file, int line)
 }
 
 void
-__dalloc_comment(void *p, char *comment, char *file, int line)
+_dalloc_comment(void *p, char *comment, char *file, int line)
 {
 	size_t i, j;
 
@@ -197,7 +197,7 @@ __dalloc_comment(void *p, char *comment, char *file, int line)
 }
 
 void
-__free(void *p, char *file, int line)
+_free(void *p, char *file, int line)
 {
 	size_t i;
 
@@ -211,7 +211,7 @@ __free(void *p, char *file, int line)
 		        "Memory overflow on %p, total: %zu bytes\n",
 		        file, line, pointers[i].p, pointers[i].siz);
 		fprintf(stderr, "The pointer ");
-		if (pointers[i].comment[0] != 0)
+		if (pointers[i].comment[0])
 			fprintf(stderr, "'%s' ", pointers[i].comment);
 		fprintf(stderr, "was allocated in '%s' on line %d.\n",
 		        pointers[i].file, pointers[i].line);
@@ -228,7 +228,7 @@ __free(void *p, char *file, int line)
 
 
 void *
-__malloc(size_t siz, char *file, int line)
+_malloc(size_t siz, char *file, int line)
 {
 	void *p = NULL;
 	size_t i;
@@ -268,7 +268,7 @@ __malloc(size_t siz, char *file, int line)
 }
 
 void *
-__calloc(size_t nmemb, size_t siz, char *file, int line)
+_calloc(size_t nmemb, size_t siz, char *file, int line)
 {
 	void *p;
 
@@ -282,22 +282,22 @@ __calloc(size_t nmemb, size_t siz, char *file, int line)
 	}
 
 	siz *= nmemb;
-	p = __malloc(siz, file, line);
+	p = _malloc(siz, file, line);
 	memset(p, 0, siz);
 
 	return p;
 }
 
 void *
-__realloc(void *p, size_t siz, char *file, int line)
+_realloc(void *p, size_t siz, char *file, int line)
 {
 	size_t i, j;
 
 	if (p == NULL)
-		return __malloc(siz, file, line);
+		return _malloc(siz, file, line);
 
 	if (siz == 0) {
-		__free(p, file, line);
+		_free(p, file, line);
 		return NULL;
 	}
 
@@ -309,7 +309,7 @@ __realloc(void *p, size_t siz, char *file, int line)
 		        "Memory overflow on %p, total: %zu bytes\n",
 		        file, line, pointers[i].p, pointers[i].siz);
 		fprintf(stderr, "The pointer ");
-		if (pointers[i].comment[0] != 0)
+		if (pointers[i].comment[0])
 			fprintf(stderr, "'%s' ", pointers[i].comment);
 		fprintf(stderr, "was allocated in '%s' on line %d.\n",
 		        pointers[i].file, pointers[i].line);
@@ -344,7 +344,7 @@ __realloc(void *p, size_t siz, char *file, int line)
 }
 
 void *
-__reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
+_reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
 {
 	if (siz != 0 && nmemb > -1 / siz) {
 		fprintf(stderr, "%s:%d: dalloc: reallocarray: %s\n",
@@ -352,24 +352,24 @@ __reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
 		exit(EXIT_STATUS);
 	}
 
-	return __realloc(p, nmemb * siz, file, line);
+	return _realloc(p, nmemb * siz, file, line);
 }
 
 char *
-__strdup(const char *s, char *file, int line)
+_strdup(const char *s, char *file, int line)
 {
 	char *p;
 	size_t siz;
 
 	siz = strlen(s) + 1;
-	p = __malloc(siz, file, line);
+	p = _malloc(siz, file, line);
 	memcpy(p, s, siz);
 
 	return p;
 }
 
 char *
-__strndup(const char *s, size_t n, char *file, int line)
+_strndup(const char *s, size_t n, char *file, int line)
 {
 	const char *end;
 	char *p;
@@ -377,7 +377,7 @@ __strndup(const char *s, size_t n, char *file, int line)
 
 	end = memchr(s, '\0', n);
 	siz = (end ? (size_t)(end - s) : n) + 1;
-	p = __malloc(siz, file, line);
+	p = _malloc(siz, file, line);
 	memcpy(p, s, siz - 1);
 	p[siz - 1] = '\0';
 
