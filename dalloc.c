@@ -15,7 +15,6 @@
  */
 
 #include <errno.h>
-#include <limits.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,39 +28,37 @@ void dalloc_check_all(void) __attribute__((destructor));
 #endif /* DALLOC */
 #include "dalloc.h"
 
+#define MIN(X, Y)     ((X) < (Y) ? (X) : (Y))
 #define OVER_ALLOC    64
 #define MAGIC_NUMBER  0x99
 #define EXIT_STATUS   9
-#define MAX_POINTERS  1024
+#define MAX_POINTERS  512
 #define COMMENT_MAX   128
-#ifndef PATH_MAX
-#define PATH_MAX      256
-#endif /* PATH_MAX */
 
 struct Pointer {
 	void *p;
 	size_t siz;
 	char comment[COMMENT_MAX];
 	int ignored;
-	char file[PATH_MAX];
+	char file[FILENAME_MAX];
 	int line;
 };
 
-static int overflow(unsigned char *p, size_t siz);
+static int overflow(void *p, size_t siz);
 static size_t find_pointer_index(void *p, char *file, int line);
 
 static pthread_mutex_t dalloc_mutex = PTHREAD_MUTEX_INITIALIZER;
+static char magic_numbers[OVER_ALLOC];
 static struct Pointer pointers[MAX_POINTERS];
 static size_t npointers;
 
 static int
-overflow(unsigned char *p, size_t siz)
+overflow(void *p, size_t siz)
 {
-	size_t i = 0;
+	if (*magic_numbers == 0)
+		memset(magic_numbers, MAGIC_NUMBER, OVER_ALLOC);
 
-	while (p[siz + i] == MAGIC_NUMBER && ++i < OVER_ALLOC);
-
-	return i < OVER_ALLOC;
+	return memcmp((char *)p + siz, magic_numbers, OVER_ALLOC);
 }
 
 static size_t
@@ -160,12 +157,17 @@ dalloc_check_all(void)
 void
 dalloc_sighandler(int sig)
 {
+#ifdef _WIN32
+	fprintf(stderr, "dalloc: signal %d\n", sig);
+#else
 	fprintf(stderr, "dalloc: %s\n", strsignal(sig));
+#endif /* _WIN32 */
+
 	exit(EXIT_STATUS);
 }
 
 void
-_dalloc_ignore(void *p, char *file, int line)
+___dalloc_ignore(void *p, char *file, int line)
 {
 	size_t i;
 
@@ -180,24 +182,27 @@ _dalloc_ignore(void *p, char *file, int line)
 }
 
 void
-_dalloc_comment(void *p, char *comment, char *file, int line)
+___dalloc_comment(void *p, const char *comment, char *file, int line)
 {
-	size_t i, j;
+	size_t i, siz;
 
 #ifdef NO_DALLOC
 	return;
 #endif /* NO_DALLOC */
 
+	if (comment == NULL)
+		return;
+
+	siz = MIN(strlen(comment), COMMENT_MAX - 1);
 	pthread_mutex_lock(&dalloc_mutex);
 	i = find_pointer_index(p, file, line);
-	for (j = 0; j < COMMENT_MAX && comment[j] != '\0'; j++)
-		pointers[i].comment[j] = comment[j];
-	pointers[i].comment[j] = '\0';
+	memcpy(pointers[i].comment, comment, siz);
+	pointers[i].comment[siz] = '\0';
 	pthread_mutex_unlock(&dalloc_mutex);
 }
 
 void
-_free(void *p, char *file, int line)
+___free(void *p, char *file, int line)
 {
 	size_t i;
 
@@ -228,10 +233,10 @@ _free(void *p, char *file, int line)
 
 
 void *
-_malloc(size_t siz, char *file, int line)
+___malloc(size_t siz, char *file, int line)
 {
 	void *p = NULL;
-	size_t i;
+	size_t sizfname;
 
 	if (siz == 0)
 		return NULL;
@@ -253,13 +258,13 @@ _malloc(size_t siz, char *file, int line)
 		exit(EXIT_STATUS);
 	}
 
-	memset((unsigned char *)p + siz, MAGIC_NUMBER, OVER_ALLOC);
+	sizfname = MIN(strlen(file), FILENAME_MAX - 1);
+	memset((char *)p + siz, MAGIC_NUMBER, OVER_ALLOC);
 	pthread_mutex_lock(&dalloc_mutex);
 	pointers[npointers].p = p;
 	pointers[npointers].siz = siz;
-	for (i = 0; i < PATH_MAX - 1 && file[i] != '\0'; i++)
-		pointers[npointers].file[i] = file[i];
-	pointers[npointers].file[i] = '\0';
+	memcpy(pointers[npointers].file, file, sizfname);
+	pointers[npointers].file[sizfname] = '\0';
 	pointers[npointers].line = line;
 	npointers++;
 	pthread_mutex_unlock(&dalloc_mutex);
@@ -268,7 +273,7 @@ _malloc(size_t siz, char *file, int line)
 }
 
 void *
-_calloc(size_t nmemb, size_t siz, char *file, int line)
+___calloc(size_t nmemb, size_t siz, char *file, int line)
 {
 	void *p;
 
@@ -282,22 +287,22 @@ _calloc(size_t nmemb, size_t siz, char *file, int line)
 	}
 
 	siz *= nmemb;
-	p = _malloc(siz, file, line);
+	p = ___malloc(siz, file, line);
 	memset(p, 0, siz);
 
 	return p;
 }
 
 void *
-_realloc(void *p, size_t siz, char *file, int line)
+___realloc(void *p, size_t siz, char *file, int line)
 {
-	size_t i, j;
+	size_t i, sizfname;
 
 	if (p == NULL)
-		return _malloc(siz, file, line);
+		return ___malloc(siz, file, line);
 
 	if (siz == 0) {
-		_free(p, file, line);
+		___free(p, file, line);
 		return NULL;
 	}
 
@@ -331,12 +336,12 @@ _realloc(void *p, size_t siz, char *file, int line)
 		exit(EXIT_STATUS);
 	}
 
-	memset((unsigned char *)p + siz, MAGIC_NUMBER, OVER_ALLOC);
+	sizfname = MIN(strlen(file), FILENAME_MAX - 1);
+	memset((char *)p + siz, MAGIC_NUMBER, OVER_ALLOC);
 	pointers[i].p = p;
 	pointers[i].siz = siz;
-	for (j = 0; j < PATH_MAX - 1 && file[j] != '\0'; j++)
-		pointers[i].file[j] = file[j];
-	pointers[i].file[j] = '\0';
+	memcpy(pointers[i].file, file, sizfname);
+	pointers[i].file[sizfname] = '\0';
 	pointers[i].line = line;
 	pthread_mutex_unlock(&dalloc_mutex);
 
@@ -344,7 +349,7 @@ _realloc(void *p, size_t siz, char *file, int line)
 }
 
 void *
-_reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
+___reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
 {
 	if (siz != 0 && nmemb > -1 / siz) {
 		fprintf(stderr, "%s:%d: dalloc: reallocarray: %s\n",
@@ -352,24 +357,24 @@ _reallocarray(void *p, size_t nmemb, size_t siz, char *file, int line)
 		exit(EXIT_STATUS);
 	}
 
-	return _realloc(p, nmemb * siz, file, line);
+	return ___realloc(p, nmemb * siz, file, line);
 }
 
 char *
-_strdup(const char *s, char *file, int line)
+___strdup(const char *s, char *file, int line)
 {
 	char *p;
 	size_t siz;
 
 	siz = strlen(s) + 1;
-	p = _malloc(siz, file, line);
+	p = ___malloc(siz, file, line);
 	memcpy(p, s, siz);
 
 	return p;
 }
 
 char *
-_strndup(const char *s, size_t n, char *file, int line)
+___strndup(const char *s, size_t n, char *file, int line)
 {
 	const char *end;
 	char *p;
@@ -377,7 +382,7 @@ _strndup(const char *s, size_t n, char *file, int line)
 
 	end = memchr(s, '\0', n);
 	siz = (end ? (size_t)(end - s) : n) + 1;
-	p = _malloc(siz, file, line);
+	p = ___malloc(siz, file, line);
 	memcpy(p, s, siz - 1);
 	p[siz - 1] = '\0';
 
