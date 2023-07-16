@@ -1,20 +1,22 @@
 dalloc
 ======
-A simple, thread safe, drop-in memory allocation debugging lib for C89+
+A simple, thread safe, drop-in memory allocation debugging lib for C
 
 Usage
 -----
 dalloc.c and dalloc.h should be dropped into an existing project and
 compiled with the `-DDALLOC` flag to define the macro that enables dalloc.
 dalloc will replace free(), malloc(), calloc(), realloc(), reallocarray(),
-strdup(), and strndup() by a more secure version that will check for buffer
-overflow and memory leak. It will also output a recap at the end of the program.
+strdup(), strndup(), vasprintf() and asprintf() by a more secure version that
+will check for buffer overflow and memory leak. It will also output a recap at
+the end of the program.
 
 By defining `EXITSEGV` all exit() call will be replaced by a segmentation fault
 which can be very useful to check where an overflow occur with a real debugger.
 
-strdup, strndup and reallocarray are not standard so you'll probably need to
-define `_DEFAULT_SOURCE` or equivalent to use them outside of dalloc.
+strdup, strndup, reallocarray, vasprintf and asprintf are not standard so you
+will probably need to define `_DEFAULT_SOURCE` or equivalent to use them
+outside of dalloc.
 
 Functions
 ---------
@@ -43,5 +45,5 @@ When `DALLOC` is not defined this function does nothing.
 
 Notes
 -----
-An error with "Unknown pointer" is either caused by a double free or when
-freeing a pointer allocated with a function not supported by dalloc.
+An error with "Unknown pointer" can be caused by a double free or when freeing
+a pointer allocated with a function not supported by dalloc.

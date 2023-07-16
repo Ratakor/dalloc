@@ -16,16 +16,17 @@
 
 #include <errno.h>
 #include <pthread.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#define DALLOC_INTERNAL
+#include "dalloc.h"
+
 #define EXIT_STATUS   9
 
 #ifdef DALLOC
-#undef DALLOC
-#include "dalloc.h"
-
 #define MIN(X, Y)     ((X) < (Y) ? (X) : (Y))
 #define OVER_ALLOC    64
 #define MAGIC_NUMBER  0x99
@@ -201,8 +202,11 @@ _dalloc_malloc(size_t siz, char *file, int line)
 	void *p = NULL;
 	size_t sizfname;
 
-	if (siz == 0)
+	if (siz == 0) {
+		fprintf(stderr, "%s:%d: dalloc: malloc with size == 0\n",
+		        file, line);
 		return NULL;
+	}
 
 	if (npointers == MAX_POINTERS) {
 		fprintf(stderr, "dalloc: Too much pointers (max:%d)\n",
@@ -240,8 +244,11 @@ _dalloc_calloc(size_t nmemb, size_t siz, char *file, int line)
 {
 	void *p;
 
-	if (nmemb == 0 || siz == 0)
+	if (nmemb == 0 || siz == 0) {
+		fprintf(stderr, "%s:%d: dalloc: calloc with size == 0\n",
+		        file, line);
 		return NULL;
+	}
 
 	if (nmemb > -1 / siz) {
 		fprintf(stderr, "%s:%d: dalloc: calloc: %s\n",
@@ -314,7 +321,13 @@ _dalloc_realloc(void *p, size_t siz, char *file, int line)
 void *
 _dalloc_reallocarray(void *p, size_t n, size_t s, char *file, int line)
 {
-	if (s != 0 && n > -1 / s) {
+	if (n == 0 || s == 0) {
+		fprintf(stderr, "%s:%d: dalloc: reallocarray with size == 0\n",
+		        file, line);
+		return NULL;
+	}
+
+	if (n > -1 / s) {
 		fprintf(stderr, "%s:%d: dalloc: reallocarray: %s\n",
 		        file, line, strerror(ENOMEM));
 		exit(EXIT_STATUS);
@@ -352,31 +365,44 @@ _dalloc_strndup(const char *s, size_t n, char *file, int line)
 	return p;
 }
 
-#else
-
-#include "dalloc.h"
-
-#define NO_DALLOC "dalloc: Define `DALLOC` to enable dalloc"
-
-size_t
-dalloc_check_overflow(void)
+int
+_dalloc_vasprintf(char **p, const char *fmt, va_list ap, char *file, int line)
 {
-	fprintf(stderr, "%s\n", NO_DALLOC);
-	return 0;
+	va_list ap2;
+	size_t siz;
+	int rv;
+
+	va_copy(ap2, ap);
+	rv = vsnprintf(NULL, 0, fmt, ap2);
+	va_end(ap2);
+	if (rv < 0) {
+		fprintf(stderr, "%s:%d: dalloc: asprintf: %s\n",
+		        file, line, strerror(errno));
+		exit(EXIT_STATUS);
+	}
+	siz = rv + 1;
+	*p = _dalloc_malloc(siz, file, line);
+	rv = vsnprintf(*p, siz, fmt, ap);
+	if (rv < 0) {
+		fprintf(stderr, "%s:%d: dalloc: asprintf: %s\n",
+		        file, line, strerror(errno));
+		exit(EXIT_STATUS);
+	}
+
+	return rv;
 }
 
-void
-dalloc_check_free(void)
+int
+_dalloc_asprintf(char **p, char *file, int line, const char *fmt, ...)
 {
-	fprintf(stderr, "%s\n", NO_DALLOC);
-	return;
-}
+	int rv;
+	va_list ap;
 
-void
-dalloc_check_all(void)
-{
-	fprintf(stderr, "%s\n", NO_DALLOC);
-	return;
+	va_start(ap, fmt);
+	rv = _dalloc_vasprintf(p, fmt, ap, file, line);
+	va_end(ap);
+
+	return rv;
 }
 #endif /* DALLOC */
 
