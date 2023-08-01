@@ -36,6 +36,10 @@ Add a comment to a pointer so it is more easy to know what the pointer stands
 for just by looking at the error message from dalloc.
 When `DALLOC` is not defined this function does nothing.
 
+#### dalloc_query(void *p)
+Output informations about p to stderr.
+When `DALLOC` is not defined this function does nothing.
+
 Notes
 -----
 An error with "Unknown pointer" is either caused by a double free or when
