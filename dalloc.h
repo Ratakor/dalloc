@@ -8,8 +8,8 @@
 #ifndef DALLOC_H
 #define DALLOC_H
 
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -25,8 +25,10 @@ extern "C" {
 #define reallocarray(p, n, s)  (_dalloc_reallocarray(p, n, s, __FILE__, __LINE__))
 #define strdup(s)              (_dalloc_strdup(s, __FILE__, __LINE__))
 #define strndup(s, n)          (_dalloc_strndup(s, n, __FILE__, __LINE__))
+#if __STDC_VERSION__ >= 199901L
 #define vasprintf(p, fmt, ap)  (_dalloc_vasprintf(p, fmt, ap, __FILE__, __LINE__))
 #define asprintf(p, ...)       (_dalloc_asprintf(p, __FILE__, __LINE__, __VA_ARGS__))
+#endif /* __STDC_VERSION__ >= 199901L */
 
 #define dalloc_ignore(p)       (_dalloc_ignore(p, __FILE__, __LINE__))
 #define dalloc_comment(p, str) (_dalloc_comment(p, str, __FILE__, __LINE__))
@@ -48,8 +50,10 @@ void *_dalloc_realloc(void *p, size_t siz, char *file, int line);
 void *_dalloc_reallocarray(void *p, size_t n, size_t s, char *file, int line);
 char *_dalloc_strdup(const char *s, char *file, int line);
 char *_dalloc_strndup(const char *s, size_t n, char *file, int line);
+#if __STDC_VERSION__ >= 199901L
 int _dalloc_vasprintf(char **p, const char *fmt, va_list ap, char *file, int line);
 int _dalloc_asprintf(char **p, char *file, int line, const char *fmt, ...);
+#endif /* __STDC_VERSION__ >= 199901L */
 #else
 #define dalloc_check_overflow() 0
 #define dalloc_check_free()

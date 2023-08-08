@@ -16,17 +16,13 @@
 
 #include <errno.h>
 #include <pthread.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #define DALLOC_INTERNAL
 #include "dalloc.h"
 
-#define EXIT_STATUS    9
+#define EXIT_STATUS    EXIT_FAILURE
 #define OVER_ALLOC     64
-#define MAGIC_NUMBER   0x99
+#define MAGIC_NUMBER   0xdead
 
 #define x1             ((char)(MAGIC_NUMBER))
 #define x2             x1, x1
@@ -222,7 +218,7 @@ _dalloc_query(void *p, char *file, int line)
 void
 _dalloc_free(void *p, char *file, int line)
 {
-	dalloc_ptr *dp, *prev;
+	dalloc_ptr *dp, *prev = NULL; /* cc whines */
 
 	if (p == NULL)
 		return;
@@ -311,7 +307,7 @@ _dalloc_realloc(void *p, size_t siz, char *file, int line)
 		return _dalloc_malloc(siz, file, line);
 
 	if (siz == 0) {
-		_dalloc_free(p, file, line);
+		eprintf("%s:%d: dalloc: realloc with size == 0\n", file, line);
 		return NULL;
 	}
 
@@ -370,12 +366,10 @@ _dalloc_strdup(const char *s, char *file, int line)
 char *
 _dalloc_strndup(const char *s, size_t n, char *file, int line)
 {
-	const char *end;
 	char *p;
 	size_t siz;
 
-	end = memchr(s, '\0', n);
-	siz = end ? (size_t)(end - s) : n;
+	siz = strnlen(s, n);
 	p = _dalloc_malloc(siz + 1, file, line);
 	memcpy(p, s, siz);
 	p[siz] = '\0';
@@ -383,6 +377,7 @@ _dalloc_strndup(const char *s, size_t n, char *file, int line)
 	return p;
 }
 
+#if __STDC_VERSION__ >= 199901L
 int
 _dalloc_vasprintf(char **p, const char *fmt, va_list ap, char *file, int line)
 {
@@ -422,3 +417,4 @@ _dalloc_asprintf(char **p, char *file, int line, const char *fmt, ...)
 
 	return rv;
 }
+#endif /* __STDC_VERSION__ >= 199901L */
