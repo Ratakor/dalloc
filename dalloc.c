@@ -47,7 +47,6 @@ struct dalloc_ptr {
 };
 
 static void eprintf(const char *fmt, ...);
-static char *xstrdup(const char *s, char *file, int line);
 static dalloc_ptr *find_ptr(void *p, char *file, int line);
 static void check_overflow(dalloc_ptr *dp, char *file, int line);
 
@@ -63,22 +62,6 @@ eprintf(const char *fmt, ...)
 	va_start(ap, fmt);
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);
-}
-
-static char *
-xstrdup(const char *s, char *file, int line)
-{
-	char *p;
-	size_t siz;
-
-	siz = strlen(s) + 1;
-	if ((p = malloc(siz)) == NULL) {
-		eprintf("%s:%d: dalloc: %s", file, line, strerror(errno));
-		pthread_mutex_unlock(&dalloc_mutex);
-		exit(EXIT_STATUS);
-	}
-
-	return memcpy(p, s, siz);
 }
 
 static dalloc_ptr *
@@ -196,7 +179,12 @@ _dalloc_comment(void *p, const char *comment, char *file, int line)
 	pthread_mutex_lock(&dalloc_mutex);
 	dp = find_ptr(p, file, line);
 	free(dp->comment);
-	dp->comment = xstrdup(comment, file, line);
+	dp->comment = strdup(comment);
+	if (dp->comment == NULL) {
+		eprintf("%s:%d: dalloc: %s", file, line, strerror(errno));
+		pthread_mutex_unlock(&dalloc_mutex);
+		exit(EXIT_STATUS);
+	}
 	pthread_mutex_unlock(&dalloc_mutex);
 }
 
@@ -240,7 +228,6 @@ _dalloc_free(void *p, char *file, int line)
 	pthread_mutex_unlock(&dalloc_mutex);
 
 	free(dp->p);
-	free(dp->file);
 	free(dp->comment);
 	free(dp);
 }
@@ -270,9 +257,8 @@ _dalloc_malloc(size_t siz, char *file, int line)
 	memset((char *)dp->p + siz, MAGIC_NUMBER, OVER_ALLOC);
 	dp->siz = siz;
 	dp->line = line;
-
+	dp->file = file;
 	pthread_mutex_lock(&dalloc_mutex);
-	dp->file = xstrdup(file, file, line);
 	dp->next = head;
 	head = dp;
 	pthread_mutex_unlock(&dalloc_mutex);
@@ -331,8 +317,7 @@ _dalloc_realloc(void *p, size_t siz, char *file, int line)
 	memset((char *)dp->p + siz, MAGIC_NUMBER, OVER_ALLOC);
 	dp->siz = siz;
 	dp->line = line;
-	free(dp->file);
-	dp->file = xstrdup(file, file, line);
+	dp->file = file;
 	pthread_mutex_unlock(&dalloc_mutex);
 
 	return dp->p;
